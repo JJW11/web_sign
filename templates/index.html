@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Web Sign Translator</title>
+  <style>
+    body{margin:0;font-family:system-ui,Segoe UI,Roboto,"Noto Sans KR";background:#0e0f12;color:#e9edf7;}
+    .wrap{max-width:1400px;margin:0 auto;padding:18px;}
+    .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;}
+    .label{color:#a8b0c3;font-size:12px;letter-spacing:.12em;}
+
+    /* ✅ 좌: 메인(큰 화면) / 우: 패널 */
+    .grid{display:grid;grid-template-columns:2fr 1fr;gap:14px;align-items:start;}
+    @media (max-width: 900px){ .grid{grid-template-columns:1fr;} }
+
+    .card{background:#171a20;border:1px solid rgba(255,255,255,.08);border-radius:14px;overflow:hidden;}
+    .ph{padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.08);display:flex;justify-content:space-between;align-items:center;color:#a8b0c3;}
+    .body{padding:12px;}
+
+    /* ✅ 메인 화면(모델 출력) */
+    #out{
+      width:100%;
+      aspect-ratio:16/9;
+      object-fit:cover;
+      border-radius:12px;
+      background:#0b0c10;
+      display:block;
+    }
+
+    /* ✅ 오른쪽: 작은 비디오(프리셋/카메라) 크기 */
+    .miniGrid{
+      display:grid;
+      grid-template-columns:1fr;
+      gap:12px;
+      margin-top:12px;
+    }
+    .miniBox{
+      border:1px solid rgba(255,255,255,.08);
+      background:#11141a;
+      border-radius:14px;
+      padding:10px;
+    }
+    .miniTitle{
+      display:flex;justify-content:space-between;align-items:center;
+      color:#a8b0c3;font-size:12px;letter-spacing:.12em;margin-bottom:8px;
+    }
+    .miniMedia{
+      width:100%;
+      max-width:420px;      /* ✅ 스샷 느낌으로 적당히 */
+      aspect-ratio:16/9;
+      object-fit:cover;
+      border-radius:12px;
+      background:#0b0c10;
+      display:block;
+      margin:0 auto;
+    }
+
+    .row{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;}
+    button{border:1px solid rgba(17,183,255,.35);background:rgba(17,183,255,.12);color:#dff6ff;padding:10px 12px;border-radius:12px;font-weight:800;cursor:pointer;}
+    button:hover{background:rgba(17,183,255,.18);}
+
+    .final{margin-bottom:14px;padding:14px;border-radius:14px;background:#1d212a;border:1px solid rgba(255,255,255,.08);}
+    .msg{margin-top:6px;font-size:22px;font-weight:900;min-height:30px;}
+    .pillbox{margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;}
+    .pill{padding:6px 10px;border-radius:999px;border:1px solid rgba(24,224,180,.35);background:rgba(24,224,180,.12);font-weight:900;}
+    .status{margin-top:10px;color:#a8b0c3;font-size:13px;white-space:pre-wrap;}
+
+    /* 캡처용 캔버스는 숨김 */
+    #c{display:none;}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div>
+        <div class="label">COMPUTER VISION • REAL-TIME SIGN LANGUAGE TRANSLATION</div>
+        <div style="font-weight:900;font-size:18px;">메인: 모델 출력(관절 표시) / 우측: 프리셋 + 현재 카메라 입력(작게)</div>
+      </div>
+      <div id="wsState" style="color:#a8b0c3;">WS: -</div>
+    </div>
+
+    <div class="final">
+      <div class="label">FINAL TRANSLATED MESSAGE</div>
+      <div id="finalMsg" class="msg">—</div>
+      <div class="pillbox" id="pills"></div>
+
+      <div class="row">
+        <button id="resetBtn">Reset</button>
+        <button id="translateBtn">Translate (GPT+TTS)</button>
+      </div>
+
+      <div id="status" class="status">Status: init</div>
+    </div>
+
+    <div class="grid">
+      <!-- ✅ 좌측: 메인 큰 화면 = 모델 출력(관절표시 프레임) -->
+      <section class="card">
+        <div class="ph">
+          <div>LIVE CAMERA FEED (MODEL OUTPUT • LANDMARKS)</div>
+          <div id="predLine">—</div>
+        </div>
+        <div class="body">
+          <img id="out" alt="model output frame"/>
+        </div>
+      </section>
+
+      <!-- ✅ 우측: 프리셋 + 작은 카메라 입력 -->
+      <section class="card">
+        <div class="ph">
+          <div>DOCTOR / PRESET PANEL</div>
+          <div id="camState">-</div>
+        </div>
+        <div class="body">
+
+          <!-- 프리셋 버튼 -->
+          <div class="row" style="margin-top:0;">
+            <button id="whereBtn">where</button>
+            <button id="sinceBtn">since</button>
+            <button id="helpBtn">help</button>
+          </div>
+
+          <div class="miniGrid">
+            <!-- ✅ 프리셋 영상 -->
+            <div class="miniBox">
+              <div class="miniTitle">
+                <span>PRESET VIDEO</span>
+                <span id="presetState" style="color:#a8b0c3;">—</span>
+              </div>
+              <video id="presetVideo" class="miniMedia" controls playsinline muted></video>
+            </div>
+
+            <!-- ✅ 오른쪽 상단(패널 내): 현재 카메라 입력을 작게 -->
+            <div class="miniBox">
+              <div class="miniTitle">
+                <span>CURRENT CAMERA INPUT</span>
+                <span style="color:#a8b0c3;">preview</span>
+              </div>
+              <video id="v" class="miniMedia" autoplay playsinline muted></video>
+              <canvas id="c" width="640" height="480"></canvas>
+            </div>
+          </div>
+
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    const video = document.getElementById("v");       // ✅ 작은 카메라 입력(프리뷰)
+    const canvas = document.getElementById("c");
+    const ctx = canvas.getContext("2d");
+
+    const outImg = document.getElementById("out");   // ✅ 메인: 모델 출력(관절표시)
+    const finalMsg = document.getElementById("finalMsg");
+    const pillsEl = document.getElementById("pills");
+    const statusEl = document.getElementById("status");
+    const predLine = document.getElementById("predLine");
+    const wsState = document.getElementById("wsState");
+    const camState = document.getElementById("camState");
+
+    const resetBtn = document.getElementById("resetBtn");
+    const translateBtn = document.getElementById("translateBtn");
+
+    // ✅ 프리셋
+    const presetVideo = document.getElementById("presetVideo");
+    const presetState = document.getElementById("presetState");
+    const sinceBtn = document.getElementById("sinceBtn");
+    const whereBtn = document.getElementById("whereBtn");
+    const helpBtn  = document.getElementById("helpBtn");
+
+    let ws = null;
+    let pending = false;
+    let timer = null;
+
+    function setStatus(t){ statusEl.textContent = "Status: " + t; }
+
+    function renderBuffer(words){
+      pillsEl.innerHTML = "";
+      if(!words || words.length === 0){
+        pillsEl.textContent = "";
+        return;
+      }
+      words.forEach(w=>{
+        const s=document.createElement("span");
+        s.className="pill";
+        s.textContent=w;
+        pillsEl.appendChild(s);
+      });
+    }
+
+    function connectWS(){
+      const url = `ws://${location.host}/ws`;
+      wsState.textContent = "WS: connecting...";
+      ws = new WebSocket(url);
+
+      ws.onopen = ()=>{
+        wsState.textContent = "WS: connected";
+        setStatus("WS connected");
+      };
+
+      ws.onmessage = (ev)=>{
+        pending = false;
+        let msg = {};
+        try{ msg = JSON.parse(ev.data); }catch{ return; }
+
+        if(msg.error){
+          setStatus("server error: " + msg.error);
+          return;
+        }
+
+        if(msg.cmd === "reset"){
+          finalMsg.textContent = "—";
+          renderBuffer([]);
+          predLine.textContent = "—";
+          setStatus("reset done");
+          return;
+        }
+
+        if(msg.cmd === "translate"){
+          if(msg.final_sentence){
+            finalMsg.textContent = msg.final_sentence;
+            setStatus("translated + TTS played");
+          }
+          return;
+        }
+
+        // ✅ 메인 프레임(관절표시 결과)
+        if(msg.frame){
+          outImg.src = msg.frame;
+        }
+
+        if(msg.pred){
+          if(msg.conf !== null && msg.conf !== undefined){
+            predLine.textContent = `${msg.pred} (${Math.round(msg.conf*100)}%)`;
+          }else{
+            predLine.textContent = msg.pred;
+          }
+        }
+        if(msg.buffer){
+          renderBuffer(msg.buffer);
+        }
+        if(msg.status){
+          setStatus(msg.status);
+        }
+      };
+
+      ws.onclose = ()=>{
+        wsState.textContent = "WS: disconnected";
+        setStatus("WS closed (reconnecting...)");
+        setTimeout(connectWS, 1200);
+      };
+
+      ws.onerror = ()=>{
+        wsState.textContent = "WS: error";
+        try{ ws.close(); }catch{}
+      };
+    }
+
+    function sendFrame(){
+      if(!ws || ws.readyState !== 1) return;
+      if(pending) return;
+      if(video.readyState < 2) return;
+
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.65);
+      pending = true;
+      ws.send(dataUrl);
+    }
+
+    async function startCam(){
+      try{
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { width: 640, height: 480, facingMode: "user" },
+          audio: false
+        });
+        video.srcObject = stream;
+        camState.textContent = "camera: connected";
+
+        video.onloadedmetadata = ()=>{
+          video.play();
+          connectWS();
+          if(timer) clearInterval(timer);
+          timer = setInterval(sendFrame, 120); // 약 8fps
+          setStatus("camera ok, sending frames...");
+        };
+      }catch(e){
+        camState.textContent = "camera: blocked";
+        setStatus("camera permission denied");
+        finalMsg.textContent = "카메라 권한을 허용한 뒤 새로고침 해주세요.";
+      }
+    }
+
+    resetBtn.addEventListener("click", ()=>{
+      if(ws && ws.readyState === 1){
+        ws.send(JSON.stringify({cmd:"reset"}));
+      }
+    });
+
+    translateBtn.addEventListener("click", ()=>{
+      if(ws && ws.readyState === 1){
+        ws.send(JSON.stringify({cmd:"translate"}));
+      }
+    });
+
+    function playPreset(name){
+      const url = `/static/preset_videos/${name}.mp4?t=${Date.now()}`;
+      presetVideo.pause();
+      presetVideo.src = url;
+      presetVideo.load();
+      presetVideo.play().catch(()=>{});
+      presetState.textContent = `${name}.mp4`;
+      setStatus(`preset video: ${name}.mp4 재생`);
+    }
+
+    sinceBtn.addEventListener("click", ()=> playPreset("since"));
+    whereBtn.addEventListener("click", ()=> playPreset("where"));
+    helpBtn.addEventListener("click",  ()=> playPreset("help"));
+
+    startCam();
+  </script>
+</body>
+</html>

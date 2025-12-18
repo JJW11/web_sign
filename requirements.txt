@@ -1,0 +1,12 @@
+fastapi
+uvicorn[standard]
+numpy<2.0.0
+opencv-python
+mediapipe==0.10.14
+tensorflow==2.15.0
+keras<3.0.0
+protobuf<5.0.0
+Pillow
+openai
+gTTS
+playsound==1.2.2
